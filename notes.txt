@@ -1,0 +1,8 @@
+Queires:
+    - Query or filter by geography
+        - May want to only stick to the US/UK because tweets could be in different languages
+    - Query by text
+        - Chinese Virus
+        - Wuhan Virus
+        - Asian Virus
+    - Query by hashtag
