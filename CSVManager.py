@@ -2,7 +2,7 @@ import csv
 
 class CSVManager:
     def __init__(self):
-        self.delimeter = "-+-"
+        self.delimeter = " --> "
 
     def cleanText(self, text):
         return text.replace(',', '').replace('\n', '').replace('\"', '')
