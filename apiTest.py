@@ -59,8 +59,6 @@ def get_trump_tweets():
         print(t._json['created_at'], t._t)
 
 
-
-
 if __name__ == "__main__":
     print("Hello Nick!")
     _, api = setup()
