@@ -5,9 +5,10 @@ class CSVManager:
         self.delimeter = " --> "
 
     def cleanText(self, text):
-        return text.replace(',', '').replace('\n', '').replace('\"', '')
+        return text.replace(',', '').replace('\n', ' ').replace('\"', '')
 
     def read(self, filename="tweet_data.csv"):
+        print("Getting all queried tweets...")
         tweets = dict()
         try:
             with open(filename, 'r') as f:
@@ -17,12 +18,12 @@ class CSVManager:
                     date, text = tweet[0].replace(',', ''), self.cleanText(tweet[1])
                     tweets[text] = date
         except:
-            print("Error".format(filename))
-        print("{} tweets were saved last session.".format(len(tweets)))
+            print(" Error {} does not exist".format(filename))
+        print(" {} tweets were saved last session.".format(len(tweets)))
         return tweets
 
     def write(self, tweets, filename="tweet_data.csv"):
         with open(filename, 'w') as f:
             writer = csv.writer(f)
             for tweet, date in tweets.items():
-                writer.writerow([date, self.delimeter ,tweet])
+                writer.writerow([date, self.delimeter ,self.cleanText(tweet)])
