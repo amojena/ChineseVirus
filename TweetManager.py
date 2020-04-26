@@ -41,7 +41,7 @@ class TweetManager:
         self.csvMan.write(self.tweets)
         with open("past_queries.txt", 'w') as f:
             for query, t_id in self.queryID.items():
-                f.writelines([query, str(t_id)])
+                f.writelines([query, ',', str(t_id)])
     
     # Will get called to update previous queries results, not expected to find count tweets
     def query(self, textQuery, count):
@@ -58,6 +58,7 @@ class TweetManager:
                 for tweet in query:
                     t = tweet.full_text.replace('\n', ' ')
                     date = tweet._json['created_at']
+
                     if self.tweets.get(t) is None:
                         self.queryID[textQuery] = max(self.queryID[textQuery], tweet.id)
                         self.tweets[t] = date
@@ -74,6 +75,7 @@ class TweetManager:
         print("Bulk querying: {}".format(textQuery))
         try:
             lastId = -1
+            retweet = False
             while len(self.tweets) < count:
                 if lastId != -1:
                     newTweets = self.api.search(q=textQuery, count=count, max_id=str(lastId - 1), tweet_mode='extended')
@@ -92,6 +94,10 @@ class TweetManager:
                 for tweet in newTweets:
                     t = tweet.full_text.replace('\n', ' ')
                     date = tweet._json['created_at']
+
+                    if "RT" == t[:2]:
+                        t = "RT: " + tweet._json["retweeted_status"]["full_text"]
+
                     if self.tweets.get(t) is None:
                         # Tweets are not sorted by ID/date, check ID to find largest one (most recent tweet)
                         self.queryID[textQuery] = max(self.queryID[textQuery], tweet.id)
