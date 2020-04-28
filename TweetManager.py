@@ -19,7 +19,7 @@ class TweetManager:
         auth = tweepy.OAuthHandler(keys["api_key"], keys["api_secret_key"])
         auth.set_access_token(keys["access_token"], keys["access_token_secret"])
         self.api = tweepy.API(auth,wait_on_rate_limit=True)
-        print("Authorization succesful...\n")
+        print("Authorization succesful!\n")
     
     def getPastQueries(self):
         print("Getting past queries...")
@@ -29,10 +29,9 @@ class TweetManager:
                     q = line.split(',')
                     query, mostRecentId = q[0], q[1].strip()
                     self.queryID[query] = int(mostRecentId)
-                    print(" Got it")
 
             if len(self.tweets) < 1: raise Exception
-            print(" There are a total of {} tweets from the queries: {}".format(len(self.tweets), "".join(self.queryID.keys())))
+            print(" There are a total of {} tweets from the queries: {}".format(len(self.tweets), ", ".join(self.queryID.keys())))
         except:
             print(" No queries have been made.")
         print()
@@ -44,7 +43,7 @@ class TweetManager:
         # Record all queries that have been made with their most recent tweet ID
         with open("past_queries.txt", 'w') as f:
             for query, t_id in self.queryID.items():
-                f.writelines([query, ',', str(t_id)])
+                f.writelines([query, ',', str(t_id), '\n'])
     
     # Will get called to update previous queries results, not expected to find count tweets
     def query(self, textQuery, count):
@@ -55,16 +54,16 @@ class TweetManager:
         print("Update querying: {}".format(textQuery))
         try:
             lastBatch = 0
-            while lastBatch < count:
-                query = self.api.search(q=textQuery, count=count, lang='en', since_id=self.queryID[textQuery], tweet_mode='extended')
-
+            attempts = 0
+            while lastBatch < count and attempts < 5:
+                attempts += 1
+                query = self.api.search(q=textQuery, count=count, lang='en', since_id=str(self.queryID[textQuery]), tweet_mode='extended')
                 for tweet in query:
                     # Format multi-line tweets to be one-liners
                     t = tweet.full_text.replace('\n', ' ')
                     date = tweet._json['created_at']
 
-                    if "RT" == t[:2]:
-                        # Get original tweet text
+                    if "RT @" == t[:4]:
                         t = tweet._json["retweeted_status"]["full_text"]
 
                     if self.tweets.get(t) is None:
@@ -72,14 +71,16 @@ class TweetManager:
                         self.queryID[textQuery] = max(self.queryID[textQuery], tweet.id)
                         self.tweets[t] = [date, 0]
                         lastBatch += 1
+                        attempts = 0
 
                     else:
                         # Increment retweet count for a tweet
                         self.tweets[t][1] += 1
 
+                print("  {} tweets left.".format(count - lastBatch))
 
         except BaseException as e:
-            print(' failed on_status,',str(e))
+            print("Querying failed: {}".format(str(e)))
             time.sleep(3)
             return
 
@@ -89,6 +90,7 @@ class TweetManager:
         try:
             lastId = -1
             while len(self.tweets) < count:
+                print(" Querying...")
                 if lastId != -1:
                     newTweets = self.api.search(q=textQuery, count=count, max_id=str(lastId - 1), tweet_mode='extended')
                 else:
@@ -125,7 +127,7 @@ class TweetManager:
                         # Increment retweet count for a tweet
                         self.tweets[t][1] += 1
 
-                print(" {} tweets left.".format(count - len(self.tweets)))
+                print("  {} tweets left.".format(count - len(self.tweets)))
 
         except BaseException as e:
             print(" Failed on status: ",str(e))

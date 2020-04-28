@@ -2,5 +2,11 @@ from TweetManager import TweetManager
 
 if __name__ == "__main__":
     tweetMan = TweetManager()
-    tweetMan.query("Chinese Virus", 2000)
+
+    while True:
+        query = input("Enter keyword search to query: ")
+        if query == "kill": exit(0)
+        if query == "exit": break  
+        tweetMan.query(query, 2000)
+
     tweetMan.bookmark()
