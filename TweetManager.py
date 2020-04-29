@@ -1,14 +1,17 @@
 import tweepy
 import json
 import time
+from math import inf
 from CSVManager import CSVManager
 
 class TweetManager:
     def __init__(self):
+        self.queryID = dict() # {textQuery : id of most recent tweet, # retweets}
         self.setup()
         self.csvMan = CSVManager()
         self.tweets = self.csvMan.read() # {tweet: date}
-        self.getHistory()
+        self.getPastQueries()
+
 
     def setup(self):
         with open("twitter-creds.json", "r") as f:
@@ -16,69 +19,117 @@ class TweetManager:
         auth = tweepy.OAuthHandler(keys["api_key"], keys["api_secret_key"])
         auth.set_access_token(keys["access_token"], keys["access_token_secret"])
         self.api = tweepy.API(auth,wait_on_rate_limit=True)
+        print("Authorization succesful!\n")
 
-    def getHistory(self):
-        self.queries = set()
+    def getPastQueries(self):
+        print("Getting past queries...")
         try:
             with open("past_queries.txt", 'r') as f:
-                self.queries = set(f.readlines())
+                for line in f.readlines():
+                    q = line.split(',')
+                    query, mostRecentId = q[0], q[1].strip()
+                    self.queryID[query] = int(mostRecentId)
 
-            if len(self.tweets) < 1 or len(self.queries) == 0: raise Exception
-            print("There are a total of {} tweets from the queries: {}".format(len(self.tweets), ''.join(self.queries)))
-
+            if len(self.tweets) < 1: raise Exception
+            print(" There are a total of {} tweets from the queries: {}".format(len(self.tweets), ", ".join(self.queryID.keys())))
         except:
-            print("No queries have been made.")
+            print(" No queries have been made.")
+        print()
 
-
-    def write(self):
+    def bookmark(self):
+        print("Bookmarking {} tweets and {} queries...".format(len(self.tweets), len(self.queryID)))
         self.csvMan.write(self.tweets)
+
+        # Record all queries that have been made with their most recent tweet ID
         with open("past_queries.txt", 'w') as f:
-            f.writelines(self.queries)
+            for query, t_id in self.queryID.items():
+                f.writelines([query, ',', str(t_id), '\n'])
 
-    # Tries to find the recent count tweets when textQuery is searched
-    # TODO: Automate so it searches until it is actually able to get count tweets (using pages or unique id)
-    # TODO: Either filter out RTs or find universal json attribute for date of either original tweet or RT
-    def query(self, textQuery, batchSize):
+    # Will get called to update previous queries results, not expected to find count tweets
+    def query(self, textQuery, count):
+        if self.queryID.get(textQuery) is None: self.queryBulk(textQuery, count)
+        else: self.queryUpdate(textQuery, count)
+
+    def queryUpdate(self, textQuery, count):
+        print("Update querying: {}".format(textQuery))
         try:
-            lastId = -1
-            while len(self.tweets) < batchSize:
-                count = batchSize - len(self.tweets)
-                try:
-                    if lastId > 0:
-                        newTweets = self.api.search(q=textQuery, tweet_mode='extended', lang='en', count=count, max_id=str(lastId - 1))
+            lastBatch = 0
+            attempts = 0
+            while lastBatch < count and attempts < 5:
+                attempts += 1
+                query = self.api.search(q=textQuery, count=count, lang='en', since_id=str(self.queryID[textQuery]), tweet_mode='extended')
+                for tweet in query:
+                    # Format multi-line tweets to be one-liners
+                    t = tweet.full_text.replace('\n', ' ')
+                    date = tweet._json['created_at']
+
+                    if "RT @" == t[:4]:
+                        t = tweet._json["retweeted_status"]["full_text"]
+
+                    if self.tweets.get(t) is None:
+                        # Tweets are not sorted by ID/date, check ID to find largest one (most recent tweet)
+                        self.queryID[textQuery] = max(self.queryID[textQuery], tweet.id)
+                        self.tweets[t] = [date, 0]
+                        lastBatch += 1
+                        attempts = 0
+
                     else:
-                        newTweets = self.api.search(q=textQuery, tweet_mode='extended', lang='en', count=count)
+                        # Increment retweet count for a tweet
+                        self.tweets[t][1] += 1
 
-                    if not newTweets:
-                        break
-
-                    lastId = newTweets[-1].id
-                    for tweet in newTweets:
-                        #print(tweet)
-                        t = tweet.full_text.replace('\n', ' ')
-                        date = tweet._json['created_at']
-                        if self.tweets.get(t) is None:
-                            self.tweets[t] = date
-
-                except tweepy.TweepError as e:
-                    print(e)
-                    break
+                print("  {} tweets left.".format(count - lastBatch))
 
         except BaseException as e:
-            print('failed on_status,',str(e))
+            print("Querying failed: {}".format(str(e)))
             time.sleep(3)
             return
 
-    def getTrumpTweets(self):
-        tweets = []
-        username = 'realDonaldTrump'
-        count = 3200
-        last_id = 1241565348765347841 # Unique ID of a tweet from April 10
-
+    # Will get called whenever a completely new query is made
+    def queryBulk(self, textQuery, count):
+        print("Bulk querying: {}".format(textQuery))
         try:
-            for tweet in self.api.user_timeline(id=username, count=count, max_id=last_id):
-                tweets.append(tweet)
+            lastId = -1
+            while len(self.tweets) < count:
+                print(" Querying...")
+                if lastId != -1:
+                    newTweets = self.api.search(q=textQuery, count=count, max_id=str(lastId - 1), tweet_mode='extended')
+                else:
+                    newTweets = self.api.search(q=textQuery, count=count, tweet_mode='extended')
+
+                if not newTweets:
+                    break
+
+                lastId = newTweets[0].id
+
+                # Start keeping track of the most recent tweet in the query
+                if self.queryID.get(textQuery) is None:
+                    self.queryID[textQuery] = lastId
+
+                for tweet in newTweets:
+                    # Format multi-line tweets to be one-liners
+                    t = tweet.full_text.replace('\n', ' ')
+                    date = tweet._json['created_at']
+
+                    if "RT" == t[:2]:
+                        # Get original tweet text
+                        t = tweet._json["retweeted_status"]["full_text"]
+
+                    if self.tweets.get(t) is None:
+                        # Tweets are not sorted by ID/date, check ID to find largest one (most recent tweet)
+                        self.queryID[textQuery] = max(self.queryID[textQuery], tweet.id)
+
+                        # Tweets are not sorted by ID/date, check ID to find smallest one (earliest tweet)
+                        lastId = min(lastId, tweet.id)
+
+                        self.tweets[t] = [date, 0]
+
+                    else:
+                        # Increment retweet count for a tweet
+                        self.tweets[t][1] += 1
+
+                print("  {} tweets left.".format(count - len(self.tweets)))
+
         except BaseException as e:
-            print('failed on_status,',str(e))
+            print(" Failed on status: ",str(e))
             time.sleep(3)
             return
