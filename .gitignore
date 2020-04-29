@@ -1,2 +1,5 @@
 twitter-creds.json
 __pycache__/*
+*culster.csv
+*.csv
+wordvecs.txt*

@@ -16,7 +16,7 @@ class TweetManager:
         auth = tweepy.OAuthHandler(keys["api_key"], keys["api_secret_key"])
         auth.set_access_token(keys["access_token"], keys["access_token_secret"])
         self.api = tweepy.API(auth,wait_on_rate_limit=True)
-    
+
     def getHistory(self):
         self.queries = set()
         try:
@@ -25,7 +25,7 @@ class TweetManager:
 
             if len(self.tweets) < 1 or len(self.queries) == 0: raise Exception
             print("There are a total of {} tweets from the queries: {}".format(len(self.tweets), ''.join(self.queries)))
-        
+
         except:
             print("No queries have been made.")
 
@@ -34,19 +34,35 @@ class TweetManager:
         self.csvMan.write(self.tweets)
         with open("past_queries.txt", 'w') as f:
             f.writelines(self.queries)
-    
+
     # Tries to find the recent count tweets when textQuery is searched
     # TODO: Automate so it searches until it is actually able to get count tweets (using pages or unique id)
     # TODO: Either filter out RTs or find universal json attribute for date of either original tweet or RT
-    def query(self, textQuery, count):
+    def query(self, textQuery, batchSize):
         try:
-            # Pulling individual tweets from query
-            for tweet in self.api.search(q=textQuery, count=count, lang='en'):
-                t = tweet.text.replace('\n', ' ')
-                date = tweet._json['created_at']
-                if self.tweets.get(t) is None:
-                    self.tweets[t] = date
-            self.queries.add(textQuery)
+            lastId = -1
+            while len(self.tweets) < batchSize:
+                count = batchSize - len(self.tweets)
+                try:
+                    if lastId > 0:
+                        newTweets = self.api.search(q=textQuery, tweet_mode='extended', lang='en', count=count, max_id=str(lastId - 1))
+                    else:
+                        newTweets = self.api.search(q=textQuery, tweet_mode='extended', lang='en', count=count)
+
+                    if not newTweets:
+                        break
+
+                    lastId = newTweets[-1].id
+                    for tweet in newTweets:
+                        #print(tweet)
+                        t = tweet.full_text.replace('\n', ' ')
+                        date = tweet._json['created_at']
+                        if self.tweets.get(t) is None:
+                            self.tweets[t] = date
+
+                except tweepy.TweepError as e:
+                    print(e)
+                    break
 
         except BaseException as e:
             print('failed on_status,',str(e))

@@ -1,6 +1,8 @@
 from TweetManager import TweetManager
+import sys
 
 if __name__ == "__main__":
+    qTerm = sys.argv[1]
     tweetMan = TweetManager()
-    tweetMan.query("Chinese Virus", 2000)
+    tweetMan.query(qTerm, 3200)
     tweetMan.write()
